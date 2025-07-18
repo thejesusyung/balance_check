@@ -6,6 +6,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Tuple
 import sys
+import logging
 
 # Ensure imports work when running this file directly with Streamlit or Python.
 ROOT = Path(__file__).resolve().parents[2]
@@ -14,6 +15,8 @@ if str(ROOT) not in sys.path:
 
 import pandas as pd
 import streamlit as st
+
+logger = logging.getLogger(__name__)
 
 from src.core.highlight import cells_to_highlight
 from src.core.reconcile import reconcile
@@ -33,6 +36,7 @@ def _detect_cached(file_hash: str, content: bytes, name: str, key: str) -> Detec
 
 def _load_file(upload: st.runtime.uploaded_file_manager.UploadedFile) -> Tuple[pd.DataFrame, str, bytes]:
     """Save uploaded file to disk and read it into a DataFrame."""
+    logger.info("Loading file %s", upload.name)
     data = upload.getvalue()
     suffix = Path(upload.name).suffix
     with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
@@ -49,12 +53,15 @@ def _run_reconcile(
     api_key: str,
 ) -> Tuple[bool, str, str, str]:
     """Process two uploads and perform reconciliation."""
+    logger.info("Running reconciliation")
     df_left, path_left, bytes_left = _load_file(left_file)
     df_right, path_right, bytes_right = _load_file(right_file)
 
     det_left = _detect_cached(hashlib.md5(bytes_left).hexdigest(), bytes_left, left_file.name, api_key)
     det_right = _detect_cached(hashlib.md5(bytes_right).hexdigest(), bytes_right, right_file.name, api_key)
 
+    logger.info("Detected columns - left: %s", det_left.model_dump())
+    logger.info("Detected columns - right: %s", det_right.model_dump())
     matches, partials, unmatched = reconcile(df_left, df_right, det_left, det_right)
 
     left_cells = cells_to_highlight(matches, partials, unmatched, det_left, "left")
@@ -66,11 +73,13 @@ def _run_reconcile(
     success = not partials and not unmatched and all(m.diff == 0 for m in matches)
     report = f"Matches: {len(matches)}\nPartials: {len(partials)}\nUnmatched: {len(unmatched)}"
 
+    logger.info("Reconciliation result: %s", report.replace("\n", "; "))
     return success, report, out_left, out_right
 
 
 def main() -> None:
     """Streamlit entrypoint."""
+    logging.basicConfig(level=logging.INFO)
     st.title("Balance Check")
 
     key = st.sidebar.text_input("OpenAI API Key", type="password")

@@ -5,9 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Tuple, Dict, Iterable, Optional
 
+import logging
 import pandas as pd
 
 from src.llm.schema import Detection
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -102,11 +105,31 @@ def reconcile(
     tuple of (matches, partials, unmatched)
     """
 
+    logger.info(
+        "Starting reconciliation: left rows=%d, right rows=%d",
+        len(df_left),
+        len(df_right),
+    )
+    logger.debug("Left detection: %s", detection_left.model_dump())
+    logger.debug("Right detection: %s", detection_right.model_dump())
+
     amount_left = _amounts(df_left, detection_left)
     amount_right = _amounts(df_right, detection_right)
+    logger.debug(
+        "Computed amounts - left head: %s", amount_left.head().to_dict()
+    )
+    logger.debug(
+        "Computed amounts - right head: %s", amount_right.head().to_dict()
+    )
 
     groups_left = _group_indices(df_left, detection_left)
     groups_right = _group_indices(df_right, detection_right)
+    logger.debug(
+        "Left groups: %s", {k: len(v) for k, v in groups_left.items()}
+    )
+    logger.debug(
+        "Right groups: %s", {k: len(v) for k, v in groups_right.items()}
+    )
 
     all_keys = set(groups_left) | set(groups_right)
 
@@ -115,6 +138,7 @@ def reconcile(
     unmatched: List[Unmatched] = []
 
     for key in all_keys:
+        logger.debug("Processing group %s", key)
         left_idxs = groups_left.get(key, [])
         right_idxs = groups_right.get(key, [])
 
@@ -133,6 +157,12 @@ def reconcile(
             bucket = right_map.get(round(l_amt, 2))
             if bucket:
                 r_idx = bucket.pop(0)
+                logger.debug(
+                    "1-to-1 match: left %d -> right %d amount %.2f",
+                    l_idx,
+                    r_idx,
+                    l_amt,
+                )
                 matches.append(
                     Match([l_idx], [r_idx], l_amt, amount_right[r_idx], 0.0)
                 )
@@ -148,6 +178,12 @@ def reconcile(
             if not res:
                 break
             l_set, r_set, total = res
+            logger.debug(
+                "Subset match: left %s -> right %s total %.2f",
+                l_set,
+                r_set,
+                total,
+            )
             matches.append(
                 Match(l_set, r_set, total, total, 0.0)
             )
@@ -155,21 +191,37 @@ def reconcile(
             remaining_right = [rr for rr in remaining_right if rr[0] not in r_set]
 
         if remaining_left or remaining_right:
-            partials.append(
-                Partial(
-                    [i for i, _ in remaining_left],
-                    [i for i, _ in remaining_right],
-                    sum(amt for _, amt in remaining_left),
-                    sum(amt for _, amt in remaining_right),
-                    sum(amt for _, amt in remaining_left)
-                    - sum(amt for _, amt in remaining_right),
-                )
+            partial = Partial(
+                [i for i, _ in remaining_left],
+                [i for i, _ in remaining_right],
+                sum(amt for _, amt in remaining_left),
+                sum(amt for _, amt in remaining_right),
+                sum(amt for _, amt in remaining_left)
+                - sum(amt for _, amt in remaining_right),
             )
+            logger.debug(
+                "Partial group %s: left %s (%.2f) right %s (%.2f) diff %.2f",
+                key,
+                partial.left_rows,
+                partial.amount_left,
+                partial.right_rows,
+                partial.amount_right,
+                partial.diff,
+            )
+            partials.append(partial)
 
         for idx, amt in remaining_left:
+            logger.debug("Unmatched left row %d amount %.2f", idx, amt)
             unmatched.append(Unmatched("left", idx, amt))
         for idx, amt in remaining_right:
+            logger.debug("Unmatched right row %d amount %.2f", idx, amt)
             unmatched.append(Unmatched("right", idx, amt))
 
+    logger.info(
+        "Reconciliation finished: %d matches, %d partials, %d unmatched rows",
+        len(matches),
+        len(partials),
+        len(unmatched),
+    )
     return matches, partials, unmatched
 
