@@ -8,47 +8,32 @@ from typing import Set, Tuple
 import pandas as pd
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
-from openpyxl.packaging.relationship import RelationshipList, Relationship
+
+from openpyxl.reader import drawings
+from warnings import warn
 from shutil import copy2
 
 
 def _load_workbook_safe(path: Path):
-    """Load workbook ignoring missing image relationships."""
-    orig_get = RelationshipList.get
+    """Load workbook ignoring invalid drawing relationships."""
+    orig_find_images = drawings.find_images
 
-    def safe_get(self, key):
-        for r in self:
-            if r.Id == key:
-                return r
-        # return dummy relationship so drawing parsing is skipped
-        return Relationship(Id=key)
+    def safe_find_images(archive, rel_path):
+        try:
+            return orig_find_images(archive, rel_path)
+        except KeyError as exc:  # pragma: no cover - depends on corrupt input
+            warn(f"Skipping broken drawing reference: {exc}")
+            return [], []
 
-    RelationshipList.get = safe_get
+    drawings.find_images = safe_find_images
     try:
         return load_workbook(path)
     finally:
-        RelationshipList.get = orig_get
+        drawings.find_images = orig_find_images
 
 
 def write_coloured(df: pd.DataFrame, highlights: Set[Tuple[int, int]], target_path: str) -> str:
-    """Clone the workbook at ``target_path`` and apply highlights.
-
-    Parameters
-    ----------
-    df : pandas.DataFrame
-        DataFrame that was originally read from ``target_path``. It is only
-        used to determine the offset of data rows when applying highlights.
-    highlights : set[tuple[int, int]]
-        Set of ``(row, column)`` pairs (0-based, relative to the DataFrame)
-        that should be filled with a red colour.
-    target_path : str
-        Path to the original workbook.
-
-    Returns
-    -------
-    str
-        Path to the newly written workbook with ``_checked`` suffix.
-    """
+    """Clone the workbook at ``target_path`` and apply highlights."""
 
     src = Path(target_path)
     if not src.exists():
