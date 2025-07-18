@@ -1,0 +1,9 @@
+pandas>=2.0.0,<3.0.0
+openpyxl
+xlrd==2.0.1
+xlwt
+streamlit
+tiktoken
+openai
+pydantic
+pytest
