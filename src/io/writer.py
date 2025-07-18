@@ -9,7 +9,7 @@ import pandas as pd
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
 
-from openpyxl.reader import drawings
+from openpyxl.reader import drawings, excel
 from warnings import warn
 from shutil import copy2
 
@@ -17,6 +17,7 @@ from shutil import copy2
 def _load_workbook_safe(path: Path):
     """Load workbook ignoring invalid drawing relationships."""
     orig_find_images = drawings.find_images
+    orig_find_images_excel = excel.find_images
 
     def safe_find_images(archive, rel_path):
         try:
@@ -26,10 +27,12 @@ def _load_workbook_safe(path: Path):
             return [], []
 
     drawings.find_images = safe_find_images
+    excel.find_images = safe_find_images
     try:
         return load_workbook(path)
     finally:
         drawings.find_images = orig_find_images
+        excel.find_images = orig_find_images_excel
 
 
 def write_coloured(df: pd.DataFrame, highlights: Set[Tuple[int, int]], target_path: str) -> str:
