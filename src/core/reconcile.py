@@ -41,9 +41,18 @@ class Unmatched:
     amount: float
 
 
+def _to_numeric(series: pd.Series) -> pd.Series:
+    """Parse a column of potential numeric strings robustly."""
+    numeric = pd.to_numeric(series, errors="coerce")
+    if numeric.isna().any():
+        alt = pd.to_numeric(series.astype(str).str.replace(",", "."), errors="coerce")
+        numeric = numeric.fillna(alt)
+    return numeric.fillna(0)
+
+
 def _amounts(df: pd.DataFrame, det: Detection) -> pd.Series:
-    debit = pd.to_numeric(df.iloc[:, det.debit_column], errors="coerce").fillna(0)
-    credit = pd.to_numeric(df.iloc[:, det.credit_column], errors="coerce").fillna(0)
+    debit = _to_numeric(df.iloc[:, det.debit_column])
+    credit = _to_numeric(df.iloc[:, det.credit_column])
     return debit - credit
 
 
