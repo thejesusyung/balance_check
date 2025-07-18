@@ -11,19 +11,38 @@ import pandas as pd
 from . import prompts, schema
 
 
-_DEBIT_RE = re.compile(r"^(дебет|дт|debit)$", re.IGNORECASE)
-_CREDIT_RE = re.compile(r"^(кредит|кт|credit)$", re.IGNORECASE)
+_DEBIT_RE = re.compile(
+    r"(дебет|дт|debit|debet|расход|withdraw|charge|expense)",
+    re.IGNORECASE,
+)
+_CREDIT_RE = re.compile(
+    r"(кредит|кт|credit|deposit|income|приход|поступ)",
+    re.IGNORECASE,
+)
 
 
 def _heuristic_detection(df: pd.DataFrame) -> schema.Detection:
     debit_idx: Optional[int] = None
     credit_idx: Optional[int] = None
+
     for i, col in enumerate(map(str, df.columns)):
         norm = col.strip().lower()
-        if debit_idx is None and _DEBIT_RE.match(norm):
+        if debit_idx is None and _DEBIT_RE.search(norm):
             debit_idx = i
-        if credit_idx is None and _CREDIT_RE.match(norm):
+        if credit_idx is None and _CREDIT_RE.search(norm):
             credit_idx = i
+
+    numeric_cols = [
+        i
+        for i, c in enumerate(df.columns)
+        if pd.api.types.is_numeric_dtype(df[c])
+    ]
+
+    if debit_idx is None and numeric_cols:
+        debit_idx = numeric_cols[0]
+    if credit_idx is None and len(numeric_cols) > 1:
+        credit_idx = numeric_cols[1]
+
     if debit_idx is None or credit_idx is None:
         raise ValueError("Could not heuristically determine debit/credit columns")
     return schema.Detection(
