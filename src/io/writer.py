@@ -8,7 +8,26 @@ from typing import Set, Tuple
 import pandas as pd
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
+from openpyxl.packaging.relationship import RelationshipList, Relationship
 from shutil import copy2
+
+
+def _load_workbook_safe(path: Path):
+    """Load workbook ignoring missing image relationships."""
+    orig_get = RelationshipList.get
+
+    def safe_get(self, key):
+        for r in self:
+            if r.Id == key:
+                return r
+        # return dummy relationship so drawing parsing is skipped
+        return Relationship(Id=key)
+
+    RelationshipList.get = safe_get
+    try:
+        return load_workbook(path)
+    finally:
+        RelationshipList.get = orig_get
 
 
 def write_coloured(df: pd.DataFrame, highlights: Set[Tuple[int, int]], target_path: str) -> str:
@@ -38,7 +57,7 @@ def write_coloured(df: pd.DataFrame, highlights: Set[Tuple[int, int]], target_pa
     dst = src.with_name(f"{src.stem}_checked.xlsx")
     copy2(src, dst)
 
-    wb = load_workbook(dst)
+    wb = _load_workbook_safe(dst)
     ws = wb.active
 
     fill = PatternFill(start_color="FF6666", end_color="FF6666", fill_type="solid")
