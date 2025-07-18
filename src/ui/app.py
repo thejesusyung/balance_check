@@ -5,6 +5,12 @@ from io import BytesIO
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Tuple
+import sys
+
+# Ensure imports work when running this file directly with Streamlit or Python.
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.append(str(ROOT))
 
 import pandas as pd
 import streamlit as st
