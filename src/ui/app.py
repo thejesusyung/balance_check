@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from io import BytesIO
+from openpyxl.utils import get_column_letter
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Tuple
@@ -54,6 +55,15 @@ def _run_reconcile(
 ) -> Tuple[bool, str, str, str]:
     """Process two uploads and perform reconciliation."""
     logger.info("Running reconciliation")
+    detail_logger = logging.getLogger("balance_check.sum")
+    if not detail_logger.handlers:
+        handler = logging.FileHandler("sum.log")
+        handler.setFormatter(
+            logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+        )
+        detail_logger.addHandler(handler)
+        detail_logger.setLevel(logging.DEBUG)
+
     df_left, path_left, bytes_left = _load_file(left_file)
     df_right, path_right, bytes_right = _load_file(right_file)
 
@@ -64,12 +74,26 @@ def _run_reconcile(
     logger.info("Detected columns - left: %s", det_left.model_dump())
     logger.info("Detected columns - right: %s", det_right.model_dump())
 
-    debit_total = pd.to_numeric(
+    debit_series = pd.to_numeric(
         df_left.iloc[:, det_left.debit_column], errors="coerce"
-    ).fillna(0).sum()
-    credit_total = pd.to_numeric(
+    ).fillna(0)
+    credit_series = pd.to_numeric(
         df_right.iloc[:, det_right.credit_column], errors="coerce"
-    ).fillna(0).sum()
+    ).fillna(0)
+
+    left_col_letter = get_column_letter(det_left.debit_column + 1)
+    for idx, val in enumerate(debit_series, start=2):
+        cell = f"{left_col_letter}{idx}"
+        detail_logger.debug("Left %s: %s=%.2f", left_file.name, cell, val)
+    debit_total = debit_series.sum()
+    detail_logger.debug("Left %s total=%.2f", left_file.name, debit_total)
+
+    right_col_letter = get_column_letter(det_right.credit_column + 1)
+    for idx, val in enumerate(credit_series, start=2):
+        cell = f"{right_col_letter}{idx}"
+        detail_logger.debug("Right %s: %s=%.2f", right_file.name, cell, val)
+    credit_total = credit_series.sum()
+    detail_logger.debug("Right %s total=%.2f", right_file.name, credit_total)
 
     logger.info(
         "Early check totals - debit left: %.2f credit right: %.2f",
