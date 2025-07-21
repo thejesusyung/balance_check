@@ -60,8 +60,32 @@ def _run_reconcile(
     det_left = _detect_cached(hashlib.md5(bytes_left).hexdigest(), bytes_left, left_file.name, api_key)
     det_right = _detect_cached(hashlib.md5(bytes_right).hexdigest(), bytes_right, right_file.name, api_key)
 
+
     logger.info("Detected columns - left: %s", det_left.model_dump())
     logger.info("Detected columns - right: %s", det_right.model_dump())
+
+    debit_total = pd.to_numeric(
+        df_left.iloc[:, det_left.debit_column], errors="coerce"
+    ).fillna(0).sum()
+    credit_total = pd.to_numeric(
+        df_right.iloc[:, det_right.credit_column], errors="coerce"
+    ).fillna(0).sum()
+
+    logger.info(
+        "Early check totals - debit left: %.2f credit right: %.2f",
+        debit_total,
+        credit_total,
+    )
+
+    if round(debit_total, 2) == round(credit_total, 2):
+        out_left = write_coloured(df_left, set(), path_left)
+        out_right = write_coloured(df_right, set(), path_right)
+        report = (
+            f"Debit total {debit_total:.2f} matches credit total {credit_total:.2f}"
+        )
+        logger.info("Totals match - skipping detailed reconciliation")
+        return True, report, out_left, out_right
+
     matches, partials, unmatched = reconcile(df_left, df_right, det_left, det_right)
 
     left_cells = cells_to_highlight(matches, partials, unmatched, det_left, "left")
