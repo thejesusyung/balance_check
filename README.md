@@ -35,8 +35,10 @@ make run  # or `streamlit run src/ui/app.py`
 ```
 
 Upload the two workbooks, provide the API key if desired and press
-**Reconcile**. The app will offer downloads for the coloured Excel files and a
-text report.
+**Reconcile**. The app first compares the total debit of the left workbook with
+the total credit of the right. If they match a short confirmation is returned,
+otherwise a detailed reconciliation is performed. In both cases the app offers
+downloads for the coloured Excel files and a text report.
 
 ## Development
 
