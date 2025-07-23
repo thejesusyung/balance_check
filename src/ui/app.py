@@ -74,40 +74,63 @@ def _run_reconcile(
     logger.info("Detected columns - left: %s", det_left.model_dump())
     logger.info("Detected columns - right: %s", det_right.model_dump())
 
-    debit_series = pd.to_numeric(
+    left_debit = pd.to_numeric(
         df_left.iloc[:, det_left.debit_column], errors="coerce"
     ).fillna(0)
-    credit_series = pd.to_numeric(
+    left_credit = pd.to_numeric(
+        df_left.iloc[:, det_left.credit_column], errors="coerce"
+    ).fillna(0)
+    right_debit = pd.to_numeric(
+        df_right.iloc[:, det_right.debit_column], errors="coerce"
+    ).fillna(0)
+    right_credit = pd.to_numeric(
         df_right.iloc[:, det_right.credit_column], errors="coerce"
     ).fillna(0)
 
-    left_col_letter = get_column_letter(det_left.debit_column + 1)
-    for idx, val in enumerate(debit_series, start=2):
-        cell = f"{left_col_letter}{idx}"
+    left_debit_letter = get_column_letter(det_left.debit_column + 1)
+    for idx, val in enumerate(left_debit, start=2):
+        cell = f"{left_debit_letter}{idx}"
         detail_logger.debug("Left %s: %s=%.2f", left_file.name, cell, val)
-    debit_total = debit_series.sum()
-    detail_logger.debug("Left %s total=%.2f", left_file.name, debit_total)
+    left_debit_total = left_debit.sum()
+    detail_logger.debug("Left debit total=%.2f", left_debit_total)
 
-    right_col_letter = get_column_letter(det_right.credit_column + 1)
-    for idx, val in enumerate(credit_series, start=2):
-        cell = f"{right_col_letter}{idx}"
+    left_credit_letter = get_column_letter(det_left.credit_column + 1)
+    for idx, val in enumerate(left_credit, start=2):
+        cell = f"{left_credit_letter}{idx}"
+        detail_logger.debug("Left %s: %s=%.2f", left_file.name, cell, val)
+    left_credit_total = left_credit.sum()
+    detail_logger.debug("Left credit total=%.2f", left_credit_total)
+
+    right_debit_letter = get_column_letter(det_right.debit_column + 1)
+    for idx, val in enumerate(right_debit, start=2):
+        cell = f"{right_debit_letter}{idx}"
         detail_logger.debug("Right %s: %s=%.2f", right_file.name, cell, val)
-    credit_total = credit_series.sum()
-    detail_logger.debug("Right %s total=%.2f", right_file.name, credit_total)
+    right_debit_total = right_debit.sum()
+    detail_logger.debug("Right debit total=%.2f", right_debit_total)
+
+    right_credit_letter = get_column_letter(det_right.credit_column + 1)
+    for idx, val in enumerate(right_credit, start=2):
+        cell = f"{right_credit_letter}{idx}"
+        detail_logger.debug("Right %s: %s=%.2f", right_file.name, cell, val)
+    right_credit_total = right_credit.sum()
+    detail_logger.debug("Right credit total=%.2f", right_credit_total)
 
     logger.info(
-        "Early check totals - debit left: %.2f credit right: %.2f",
-        debit_total,
-        credit_total,
+        "Early check totals - debit left vs credit right: %.2f vs %.2f, credit left vs debit right: %.2f vs %.2f",
+        left_debit_total,
+        right_credit_total,
+        left_credit_total,
+        right_debit_total,
     )
 
-    if round(debit_total, 2) == round(credit_total, 2):
+    if round(left_debit_total, 2) == round(right_credit_total, 2) and round(left_credit_total, 2) == round(right_debit_total, 2):
         out_left = write_coloured(df_left, set(), path_left)
         out_right = write_coloured(df_right, set(), path_right)
         report = (
-            f"Debit total {debit_total:.2f} matches credit total {credit_total:.2f}"
+            f"Debit total left {left_debit_total:.2f} matches credit total right {right_credit_total:.2f}\n"
+            f"Credit total left {left_credit_total:.2f} matches debit total right {right_debit_total:.2f}"
         )
-        logger.info("Totals match - skipping detailed reconciliation")
+        logger.info("Cross totals match - skipping detailed reconciliation")
         return True, report, out_left, out_right
 
     matches, partials, unmatched = reconcile(df_left, df_right, det_left, det_right)
